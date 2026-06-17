@@ -1,5 +1,7 @@
 # TeX and PDF Navigation
 
+[![Version](https://img.shields.io/badge/version-1.0.0-blue)](https://marketplace.visualstudio.com/items?itemName=simonnchong.tex-sync-buttons)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Navigate seamlessly between your LaTeX source and compiled PDF — just like Overleaf, right inside VS Code.
 

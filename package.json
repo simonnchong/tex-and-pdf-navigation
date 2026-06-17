@@ -32,6 +32,9 @@
     "outline",
     "scroll"
   ],
+  "extensionDependencies": [
+    "james-yu.latex-workshop"
+  ],
   "activationEvents": [
     "onStartupFinished",
     "onLanguage:latex",
