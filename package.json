@@ -2,7 +2,7 @@
   "name": "tex-and-pdf-navigation",
   "displayName": "TeX and PDF Navigation",
   "description": "Forward sync button, TeX Sync Outline panel, and scroll sync between the TeX editor and PDF viewer.",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "publisher": "simonnchong",
   "author": {
     "name": "simonnchong"
