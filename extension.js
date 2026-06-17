@@ -5,7 +5,6 @@ const LEVEL = { part: 0, chapter: 1, section: 2, subsection: 3, subsubsection: 4
 
 let scrollSyncEnabled = false;
 let scrollSyncTimer = null;
-const SCROLL_DEBOUNCE_MS = 350;
 
 class TexSectionItem extends vscode.TreeItem {
     constructor(label, line, level) {
@@ -17,12 +16,11 @@ class TexSectionItem extends vscode.TreeItem {
         this.level = level;
         this.children = [];
         this.tooltip = label;
-        this.iconPath = new vscode.ThemeIcon(
-            ['book', 'list-unordered', 'symbol-namespace', 'symbol-method', 'symbol-field'][level] || 'symbol-field'
-        );
+        const icons = ['book', 'list-unordered', 'symbol-namespace', 'symbol-method', 'symbol-field'];
+        this.iconPath = new vscode.ThemeIcon(icons[level] || 'symbol-field');
         this.command = {
             command: 'tex-sync-buttons.gotoAndSync',
-            title: 'Go to and Sync',
+            title: 'Go to section',
             arguments: [line]
         };
     }
@@ -43,8 +41,10 @@ class TexOutlineProvider {
 }
 
 function parseOutline(uri) {
-    const doc = vscode.workspace.textDocuments.find(d => d.uri.toString() === uri.toString());
-    if (!doc) return [];
+    const doc = vscode.workspace.textDocuments.find(function(d) {
+        return d.uri.toString() === uri.toString();
+    });
+    if (!doc) { return []; }
 
     const lines = doc.getText().split('\n');
     const roots = [];
@@ -52,11 +52,13 @@ function parseOutline(uri) {
 
     for (let i = 0; i < lines.length; i++) {
         const m = HEADING_RE.exec(lines[i]);
-        if (!m) continue;
-        const level = LEVEL[m[1]] !== undefined ? LEVEL[m[1]] : 5;
-        const item = new TexSectionItem(m[2].trim(), i, level);
+        if (!m) { continue; }
+        const lvl = LEVEL[m[1]] !== undefined ? LEVEL[m[1]] : 5;
+        const item = new TexSectionItem(m[2].trim(), i, lvl);
 
-        while (stack.length && stack[stack.length - 1].level >= level) stack.pop();
+        while (stack.length > 0 && stack[stack.length - 1].level >= lvl) {
+            stack.pop();
+        }
 
         if (stack.length === 0) {
             roots.push(item);
@@ -70,36 +72,47 @@ function parseOutline(uri) {
     return roots;
 }
 
+function isTexEditor(editor) {
+    return editor && (editor.document.languageId === 'latex' || editor.document.languageId === 'tex');
+}
+
+function findTexEditor() {
+    if (isTexEditor(vscode.window.activeTextEditor)) {
+        return vscode.window.activeTextEditor;
+    }
+    return vscode.window.visibleTextEditors.find(function(e) {
+        return e.document.languageId === 'latex' || e.document.languageId === 'tex';
+    });
+}
+
 function activate(context) {
 
-    // → button in .tex editor title bar: forward sync to PDF
+    // Forward sync: jump PDF to current cursor position in .tex editor
     context.subscriptions.push(
-        vscode.commands.registerCommand('tex-sync-buttons.forwardSync', async () => {
-            try {
-                await vscode.commands.executeCommand('latex-workshop.synctex');
-            } catch {
+        vscode.commands.registerCommand('tex-sync-buttons.forwardSync', function() {
+            vscode.commands.executeCommand('latex-workshop.synctex').then(undefined, function() {
                 vscode.window.showErrorMessage(
                     'Forward sync failed. Make sure LaTeX Workshop is installed and the PDF has been built.'
                 );
-            }
+            });
         })
     );
 
-    // Outline panel
+    // Outline tree view
     const provider = new TexOutlineProvider();
     context.subscriptions.push(
         vscode.window.createTreeView('texSyncOutline', { treeDataProvider: provider, showCollapseAll: true })
     );
 
     function refreshForEditor(editor) {
-        if (editor && (editor.document.languageId === 'latex' || editor.document.languageId === 'tex')) {
+        if (isTexEditor(editor)) {
             provider.refresh(editor.document.uri);
         }
     }
 
     context.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(refreshForEditor));
     context.subscriptions.push(
-        vscode.workspace.onDidSaveTextDocument(doc => {
+        vscode.workspace.onDidSaveTextDocument(function(doc) {
             if (doc.languageId === 'latex' || doc.languageId === 'tex') {
                 provider.refresh(doc.uri);
             }
@@ -107,27 +120,28 @@ function activate(context) {
     );
 
     context.subscriptions.push(
-        vscode.commands.registerCommand('tex-sync-buttons.refreshOutline', () => {
+        vscode.commands.registerCommand('tex-sync-buttons.refreshOutline', function() {
             refreshForEditor(vscode.window.activeTextEditor);
         })
     );
 
-    // Outline item click: jump to .tex line and sync PDF
+    // Outline click: navigate to section line and forward sync
     context.subscriptions.push(
-        vscode.commands.registerCommand('tex-sync-buttons.gotoAndSync', async (line) => {
+        vscode.commands.registerCommand('tex-sync-buttons.gotoAndSync', function(line) {
             const texEditor = findTexEditor();
-            if (!texEditor) return;
+            if (!texEditor) { return; }
 
             const pos = new vscode.Position(line, 0);
-            await vscode.window.showTextDocument(texEditor.document, {
+            const sel = new vscode.Selection(pos, pos);
+
+            vscode.window.showTextDocument(texEditor.document, {
                 viewColumn: texEditor.viewColumn,
                 preserveFocus: false,
                 preview: false,
-                selection: new vscode.Selection(pos, pos)
+                selection: sel
+            }).then(function() {
+                vscode.commands.executeCommand('latex-workshop.synctex');
             });
-
-            await new Promise(r => setTimeout(r, 80));
-            try { await vscode.commands.executeCommand('latex-workshop.synctex'); } catch {}
         })
     );
 
@@ -135,56 +149,46 @@ function activate(context) {
     vscode.commands.executeCommand('setContext', 'texSyncButtons.scrollSyncOn', false);
 
     context.subscriptions.push(
-        vscode.commands.registerCommand('tex-sync-buttons.enableScrollSync', () => {
+        vscode.commands.registerCommand('tex-sync-buttons.enableScrollSync', function() {
             scrollSyncEnabled = true;
             vscode.commands.executeCommand('setContext', 'texSyncButtons.scrollSyncOn', true);
         })
     );
 
     context.subscriptions.push(
-        vscode.commands.registerCommand('tex-sync-buttons.disableScrollSync', () => {
+        vscode.commands.registerCommand('tex-sync-buttons.disableScrollSync', function() {
             scrollSyncEnabled = false;
             clearTimeout(scrollSyncTimer);
             vscode.commands.executeCommand('setContext', 'texSyncButtons.scrollSyncOn', false);
         })
     );
 
-    // Scroll listener: sync PDF when user scrolls the .tex editor
+    // Scroll listener: when enabled, sync PDF to visible center of .tex editor
     context.subscriptions.push(
-        vscode.window.onDidChangeTextEditorVisibleRanges(async (e) => {
-            if (!scrollSyncEnabled) return;
+        vscode.window.onDidChangeTextEditorVisibleRanges(function(e) {
+            if (!scrollSyncEnabled) { return; }
             const lang = e.textEditor.document.languageId;
-            if (lang !== 'latex' && lang !== 'tex') return;
-            if (!e.visibleRanges.length) return;
+            if (lang !== 'latex' && lang !== 'tex') { return; }
+            if (!e.visibleRanges.length) { return; }
 
             clearTimeout(scrollSyncTimer);
-            scrollSyncTimer = setTimeout(async () => {
+            scrollSyncTimer = setTimeout(function() {
                 const editor = e.textEditor;
                 const range = e.visibleRanges[0];
                 const centerLine = Math.floor((range.start.line + range.end.line) / 2);
                 const centerPos = new vscode.Position(centerLine, 0);
-
                 const saved = editor.selection;
                 editor.selection = new vscode.Selection(centerPos, centerPos);
-                try {
-                    await vscode.commands.executeCommand('latex-workshop.synctex');
-                } catch {}
-                editor.selection = saved;
-            }, SCROLL_DEBOUNCE_MS);
+                vscode.commands.executeCommand('latex-workshop.synctex').then(function() {
+                    editor.selection = saved;
+                }, function() {
+                    editor.selection = saved;
+                });
+            }, 350);
         })
     );
 
     refreshForEditor(vscode.window.activeTextEditor);
-}
-
-function findTexEditor() {
-    const active = vscode.window.activeTextEditor;
-    if (active && (active.document.languageId === 'latex' || active.document.languageId === 'tex')) {
-        return active;
-    }
-    return vscode.window.visibleTextEditors.find(
-        e => e.document.languageId === 'latex' || e.document.languageId === 'tex'
-    );
 }
 
 function deactivate() {
