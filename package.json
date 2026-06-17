@@ -9,6 +9,14 @@
   },
   "license": "MIT",
   "icon": "icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/simonnchong/tex-and-pdf-navigation.git"
+  },
+  "homepage": "https://github.com/simonnchong/tex-and-pdf-navigation#readme",
+  "bugs": {
+    "url": "https://github.com/simonnchong/tex-and-pdf-navigation/issues"
+  },
   "engines": {
     "vscode": "^1.74.0"
   },
