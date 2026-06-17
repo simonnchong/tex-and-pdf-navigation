@@ -1,14 +1,13 @@
 const vscode = require('vscode');
+const fs = require('fs');
 
 const HEADING_RE = /^[^%]*\\(part|chapter|section|subsection|subsubsection)\*?\{([^}]+)\}/;
 const LEVEL = { part: 0, chapter: 1, section: 2, subsection: 3, subsubsection: 4 };
 
-// ─── Scroll sync state ────────────────────────────────────────────────────────
 let scrollSyncEnabled = false;
 let scrollSyncTimer = null;
 const SCROLL_DEBOUNCE_MS = 350;
 
-// ─── Outline tree ─────────────────────────────────────────────────────────────
 class TexSectionItem extends vscode.TreeItem {
     constructor(label, line, level) {
         const collapsible = level <= 2
@@ -20,7 +19,7 @@ class TexSectionItem extends vscode.TreeItem {
         this.children = [];
         this.tooltip = label;
         this.iconPath = new vscode.ThemeIcon(
-            ['book', 'list-unordered', 'symbol-namespace', 'symbol-method', 'symbol-field'][level] ?? 'symbol-field'
+            ['book', 'list-unordered', 'symbol-namespace', 'symbol-method', 'symbol-field'][level] || 'symbol-field'
         );
         this.command = {
             command: 'tex-sync-buttons.gotoAndSync',
@@ -46,9 +45,16 @@ class TexOutlineProvider {
 
 function parseOutline(uri) {
     const doc = vscode.workspace.textDocuments.find(d => d.uri.toString() === uri.toString());
-    const lines = doc
-        ? doc.getText().split('\n')
-        : require('fs').readFileSync(uri.fsPath, 'utf8').split('\n');
+    let lines;
+    if (doc) {
+        lines = doc.getText().split('\n');
+    } else {
+        try {
+            lines = fs.readFileSync(uri.fsPath, 'utf8').split('\n');
+        } catch {
+            return [];
+        }
+    }
 
     const roots = [];
     const stack = [];
@@ -56,7 +62,7 @@ function parseOutline(uri) {
     for (let i = 0; i < lines.length; i++) {
         const m = HEADING_RE.exec(lines[i]);
         if (!m) continue;
-        const level = LEVEL[m[1]] ?? 5;
+        const level = LEVEL[m[1]] !== undefined ? LEVEL[m[1]] : 5;
         const item = new TexSectionItem(m[2].trim(), i, level);
 
         while (stack.length && stack[stack.length - 1].level >= level) stack.pop();
@@ -73,13 +79,9 @@ function parseOutline(uri) {
     return roots;
 }
 
-// ─── Activation ───────────────────────────────────────────────────────────────
 function activate(context) {
 
-    // Apply reverse-sync keybinding (double-click) to LaTeX Workshop
-    applyReverseSyncSetting();
-
-    // ── Forward sync button ──────────────────────────────────────────────────
+    // Forward sync button in .tex editor title bar
     context.subscriptions.push(
         vscode.commands.registerCommand('tex-sync-buttons.forwardSync', async () => {
             try {
@@ -90,7 +92,7 @@ function activate(context) {
         })
     );
 
-    // ── Outline panel ────────────────────────────────────────────────────────
+    // Outline panel
     const provider = new TexOutlineProvider();
     context.subscriptions.push(
         vscode.window.createTreeView('texSyncOutline', { treeDataProvider: provider, showCollapseAll: true })
@@ -115,7 +117,7 @@ function activate(context) {
         })
     );
 
-    // Click on outline item → navigate to line + forward sync
+    // Click outline item: navigate to .tex line + forward sync to PDF
     context.subscriptions.push(
         vscode.commands.registerCommand('tex-sync-buttons.gotoAndSync', async (line) => {
             const texEditor = findTexEditor();
@@ -134,7 +136,7 @@ function activate(context) {
         })
     );
 
-    // ── Scroll sync toggle ───────────────────────────────────────────────────
+    // Scroll sync toggle
     vscode.commands.executeCommand('setContext', 'texSyncButtons.scrollSyncOn', false);
 
     context.subscriptions.push(
@@ -152,7 +154,7 @@ function activate(context) {
         })
     );
 
-    // Listen to visible range changes (fires when user scrolls the editor)
+    // Scroll listener: when scroll sync is on, sync PDF to visible center of .tex editor
     context.subscriptions.push(
         vscode.window.onDidChangeTextEditorVisibleRanges(async (e) => {
             if (!scrollSyncEnabled) return;
@@ -167,7 +169,6 @@ function activate(context) {
                 const centerLine = Math.floor((range.start.line + range.end.line) / 2);
                 const centerPos = new vscode.Position(centerLine, 0);
 
-                // Save cursor, move to visible-range center, sync, restore cursor
                 const saved = editor.selection;
                 editor.selection = new vscode.Selection(centerPos, centerPos);
                 try {
@@ -178,24 +179,14 @@ function activate(context) {
         })
     );
 
-    // Initial outline load
     refreshForEditor(vscode.window.activeTextEditor);
 }
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 function findTexEditor() {
     const active = vscode.window.activeTextEditor;
     if (active && (active.document.languageId === 'latex' || active.document.languageId === 'tex')) return active;
     return vscode.window.visibleTextEditors.find(
         e => e.document.languageId === 'latex' || e.document.languageId === 'tex'
-    );
-}
-
-function applyReverseSyncSetting() {
-    vscode.workspace.getConfiguration('latex-workshop').update(
-        'view.pdf.internal.synctex.keybinding',
-        'double-click',
-        vscode.ConfigurationTarget.Global
     );
 }
 
