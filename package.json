@@ -1,0 +1,98 @@
+{
+  "name": "tex-sync-buttons",
+  "displayName": "TeX and PDF Navigation",
+  "description": "Forward sync button, TeX Sync Outline panel, and scroll sync between the TeX editor and PDF viewer.",
+  "version": "1.0.0",
+  "publisher": "simonnchong",
+  "author": {
+    "name": "simonnchong"
+  },
+  "license": "MIT",
+  "icon": "icon.png",
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "latex",
+    "tex",
+    "synctex",
+    "pdf",
+    "sync",
+    "outline",
+    "scroll"
+  ],
+  "extensionDependencies": [
+    "james-yu.latex-workshop"
+  ],
+  "activationEvents": [
+    "onStartupFinished",
+    "onLanguage:latex",
+    "onLanguage:tex"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "views": {
+      "explorer": [
+        {
+          "id": "texSyncOutline",
+          "name": "TeX Sync Outline"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "tex-sync-buttons.forwardSync",
+        "title": "Go to PDF location (Forward Sync)",
+        "icon": "$(arrow-right)",
+        "category": "TeX Sync"
+      },
+      {
+        "command": "tex-sync-buttons.refreshOutline",
+        "title": "Refresh Outline",
+        "icon": "$(refresh)",
+        "category": "TeX Sync"
+      },
+      {
+        "command": "tex-sync-buttons.enableScrollSync",
+        "title": "Enable Scroll Sync (TeX → PDF)",
+        "icon": "$(link)",
+        "category": "TeX Sync"
+      },
+      {
+        "command": "tex-sync-buttons.disableScrollSync",
+        "title": "Disable Scroll Sync",
+        "icon": "$(link-external)",
+        "category": "TeX Sync"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "tex-sync-buttons.forwardSync",
+          "when": "editorLangId == latex || editorLangId == tex",
+          "group": "navigation"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "tex-sync-buttons.refreshOutline",
+          "when": "view == texSyncOutline",
+          "group": "navigation@2"
+        },
+        {
+          "command": "tex-sync-buttons.enableScrollSync",
+          "when": "view == texSyncOutline && !texSyncButtons.scrollSyncOn",
+          "group": "navigation@1"
+        },
+        {
+          "command": "tex-sync-buttons.disableScrollSync",
+          "when": "view == texSyncOutline && texSyncButtons.scrollSyncOn",
+          "group": "navigation@1"
+        }
+      ]
+    }
+  }
+}
